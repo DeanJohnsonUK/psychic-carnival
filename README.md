@@ -23,8 +23,38 @@ This script automates the ingestion of Qualys vulnerability detection data into 
 
 ## Architecture
 
-copy
-Qualys API v4.0 (XML) Qualys QPS REST 2.0 │ │ ├── Pass 1: Detections ├── Pass 0: MAC Lookup └── Pass 2: KB/CVE Data └── Pass 2: Enrichment │ │ └────────────┬───────────────┘ │ Data Consolidation │ ┌────────┴────────┐ │ │ Main Dataset No-MAC Dataset (≥1 valid MAC) (0 valid MACs) │ │ NinjaOne Upload CSV for Review
+graph TD
+    %% Initial Context
+    Auth[Step 0: Context & Auth<br/>NinjaOne OAuth2 + Qualys Basic Auth]
+
+    %% Data Passes
+    Auth --> Pass0[Pass 0: Qualys Asset Mgmt API<br/>MACs, Normalization]
+    Auth --> Pass1[Pass 1: Qualys Detections API<br/>Active Vulns, Host IDs]
+    Auth --> Pass2[Pass 2: Qualys Knowledge Base API<br/>CVE IDs, Titles]
+
+    %% Consolidation
+    Pass0 & Pass1 & Pass2 --> Consol[Data Consolidation<br/>Join Hosts + MACs + CVEs<br/>Fan-out Logic]
+
+    %% Dataset Split
+    Consol --> Main[Main Dataset<br/>&#8805; 1 valid MAC]
+    Consol --> NoMac[No-MAC Dataset<br/>0 valid MACs]
+
+    %% Logic Flow
+    Main --> TestMode{TestMode?}
+    
+    TestMode -- Yes --> Disk1[Write to Disk CSV]
+    TestMode -- No --> StoreMode{Storage Mode}
+    
+    StoreMode -- Memory --> Ninja[NinjaOne Upload<br/>Multipart POST]
+    StoreMode -- Disk --> Disk2[Write to Disk CSV]
+    Disk2 --> Ninja
+    
+    NoMac --> Disk3[Always to Disk CSV]
+
+    %% Styling
+    style Auth fill:#f9f9f9,stroke:#333
+    style Ninja fill:#d4edda,stroke:#28a745
+    style Consol fill:#fff3cd,stroke:#ffc107
 
 
 ## Prerequisites
