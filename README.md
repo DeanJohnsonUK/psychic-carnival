@@ -23,38 +23,60 @@ This script automates the ingestion of Qualys vulnerability detection data into 
 
 ## Architecture
 
-graph TD
-    %% Initial Context
-    Auth[Step 0: Context & Auth<br/>NinjaOne OAuth2 + Qualys Basic Auth]
+## Architecture
 
-    %% Data Passes
-    Auth --> Pass0[Pass 0: Qualys Asset Mgmt API<br/>MACs, Normalization]
-    Auth --> Pass1[Pass 1: Qualys Detections API<br/>Active Vulns, Host IDs]
-    Auth --> Pass2[Pass 2: Qualys Knowledge Base API<br/>CVE IDs, Titles]
-
-    %% Consolidation
-    Pass0 & Pass1 & Pass2 --> Consol[Data Consolidation<br/>Join Hosts + MACs + CVEs<br/>Fan-out Logic]
-
-    %% Dataset Split
-    Consol --> Main[Main Dataset<br/>&#8805; 1 valid MAC]
-    Consol --> NoMac[No-MAC Dataset<br/>0 valid MACs]
-
-    %% Logic Flow
-    Main --> TestMode{TestMode?}
+```mermaid
+flowchart TD
+    A[Step 0: Context & Auth] --> B[Step 1: Pass 1<br/>Qualys Detections API<br/>XML, Paginated]
     
-    TestMode -- Yes --> Disk1[Write to Disk CSV]
-    TestMode -- No --> StoreMode{Storage Mode}
+    B -->|Unique Host IDs| C[Step 2: Pass 0<br/>Qualys Asset Mgmt API<br/>REST 2.0, Batched]
+    B -->|Unique QIDs| D[Step 3: Pass 2<br/>Qualys Knowledge Base API<br/>XML, Batched]
     
-    StoreMode -- Memory --> Ninja[NinjaOne Upload<br/>Multipart POST]
-    StoreMode -- Disk --> Disk2[Write to Disk CSV]
-    Disk2 --> Ninja
+    C -->|MAC Lookup Table| E[Step 4: Data Consolidation]
+    D -->|CVE/Title Map| E
     
-    NoMac --> Disk3[Always to Disk CSV]
+    E --> F{Valid MACs?}
+    
+    F -->|0 MACs| G[No-MAC Dataset<br/>Written to CSV]
+    F -->|1 MAC| H[One Row per Vulnerability]
+    F -->|2+ MACs| I[MAC Fan-Out<br/>Rows × MACs]
+    
+    H --> J[Main Dataset]
+    I --> J
+    
+    J --> K{TestMode?}
+    
+    K -->|Yes| L[Write Main CSV to Disk]
+    K -->|No| M{StorageMode?}
+    
+    M -->|Memory| N[MemoryStream<br/>No Temp File]
+    M -->|Disk| O[Temp CSV on Disk<br/>Stream for Upload]
+    
+    N --> P[Step 5: NinjaOne Upload<br/>Multipart POST]
+    O --> P
+    
+    P --> Q[Update LastQualysSync<br/>Custom Field]
+    
+    style A fill:#2d3748,stroke:#4a5568,color:#e2e8f0
+    style B fill:#2b6cb0,stroke:#3182ce,color:#ebf8ff
+    style C fill:#2b6cb0,stroke:#3182ce,color:#ebf8ff
+    style D fill:#2b6cb0,stroke:#3182ce,color:#ebf8ff
+    style E fill:#6b46c1,stroke:#805ad5,color:#faf5ff
+    style F fill:#d69e2e,stroke:#ecc94b,color:#fffff0
+    style G fill:#e53e3e,stroke:#fc8181,color:#fff5f5
+    style H fill:#38a169,stroke:#68d391,color:#f0fff4
+    style I fill:#38a169,stroke:#68d391,color:#f0fff4
+    style J fill:#38a169,stroke:#68d391,color:#f0fff4
+    style K fill:#d69e2e,stroke:#ecc94b,color:#fffff0
+    style L fill:#dd6b20,stroke:#ed8936,color:#fffaf0
+    style M fill:#d69e2e,stroke:#ecc94b,color:#fffff0
+    style N fill:#3182ce,stroke:#63b3ed,color:#ebf8ff
+    style O fill:#3182ce,stroke:#63b3ed,color:#ebf8ff
+    style P fill:#2b6cb0,stroke:#3182ce,color:#ebf8ff
+    style Q fill:#38a169,stroke:#68d391,color:#f0fff4
+```
 
-    %% Styling
-    style Auth fill:#f9f9f9,stroke:#333
-    style Ninja fill:#d4edda,stroke:#28a745
-    style Consol fill:#fff3cd,stroke:#ffc107
+
 ## Prerequisites
 
 ### NinjaOne Custom Fields (Required)
