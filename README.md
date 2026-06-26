@@ -23,50 +23,38 @@ This script automates the ingestion of Qualys vulnerability detection data into 
 
 ## Architecture
 
-+-----------------------------------------------------------+
-| Step 0: Context & Auth (NinjaOne OAuth2 + Qualys Basic)   |
-+-----------------------------+-----------------------------+
-                              |
-         ---------------------+---------------------
-         |                    |                    |
-+--------v-------+    +-------v--------+    +------v-------+
-| Pass 0: Assets |    | Pass 1: Vulns  |    | Pass 2: KB   |
-| (MAC/Normal)   |    | (Active Vulns) |    | (CVE/Titles) |
-+--------+-------+    +-------+--------+    +------ +------+
-         |                    |                    |
-         +--------------------+--------------------+
-                              |
-                    +---------v----------+
-                    | Data Consolidation |
-                    +---------+----------+
-                              |
-              ----------------+----------------
-              |                               |
-    +---------v----------+          +---------v----------+
-    | Main Dataset       |          | No-MAC Dataset     |
-    | (>= 1 valid MAC)   |          | (0 valid MACs)     |
-    +---------+----------+          +---------+----------+
-              |                               |
-      +-------v-------+                       |
-      | TestMode?     |                       |
-      +---+-------+---+                       |
-          |       |                           |
-        (Yes)    (No)                         |
-          |       |                           |
-          |  +----v----------+                |
-          |  | Storage Mode  |                |
-          |  +---+-------+---+                |
-          |      |       |                    |
-          |  (Memory)  (Disk)                 |
-          |      |       |                    |
-          +------+-------+--------------------+
-                 |
-        +--------v----------+
-        |  NinjaOne Upload  |
-        |  (Multipart POST) |
-        +-------------------+
+graph TD
+    %% Initial Context
+    Auth[Step 0: Context & Auth<br/>NinjaOne OAuth2 + Qualys Basic Auth]
 
+    %% Data Passes
+    Auth --> Pass0[Pass 0: Qualys Asset Mgmt API<br/>MACs, Normalization]
+    Auth --> Pass1[Pass 1: Qualys Detections API<br/>Active Vulns, Host IDs]
+    Auth --> Pass2[Pass 2: Qualys Knowledge Base API<br/>CVE IDs, Titles]
 
+    %% Consolidation
+    Pass0 & Pass1 & Pass2 --> Consol[Data Consolidation<br/>Join Hosts + MACs + CVEs<br/>Fan-out Logic]
+
+    %% Dataset Split
+    Consol --> Main[Main Dataset<br/>&#8805; 1 valid MAC]
+    Consol --> NoMac[No-MAC Dataset<br/>0 valid MACs]
+
+    %% Logic Flow
+    Main --> TestMode{TestMode?}
+    
+    TestMode -- Yes --> Disk1[Write to Disk CSV]
+    TestMode -- No --> StoreMode{Storage Mode}
+    
+    StoreMode -- Memory --> Ninja[NinjaOne Upload<br/>Multipart POST]
+    StoreMode -- Disk --> Disk2[Write to Disk CSV]
+    Disk2 --> Ninja
+    
+    NoMac --> Disk3[Always to Disk CSV]
+
+    %% Styling
+    style Auth fill:#f9f9f9,stroke:#333
+    style Ninja fill:#d4edda,stroke:#28a745
+    style Consol fill:#fff3cd,stroke:#ffc107
 ## Prerequisites
 
 ### NinjaOne Custom Fields (Required)
