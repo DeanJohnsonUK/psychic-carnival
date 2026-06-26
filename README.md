@@ -23,8 +23,6 @@ This script automates the ingestion of Qualys vulnerability detection data into 
 
 ## Architecture
 
-## Architecture
-
 ```mermaid
 flowchart TD
     A[Step 0: Context & Auth] --> B[Step 1: Pass 1<br/>Qualys Detections API<br/>XML, Paginated]
